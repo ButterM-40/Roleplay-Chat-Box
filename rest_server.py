@@ -48,49 +48,13 @@ async def startup_event():
     
     try:
         from backend.models.character_manager import CharacterManager
-        from backend.models.voice_synthesizer import VoiceSynthesizer
         
         character_manager = CharacterManager()
         await character_manager.initialize()
         characters_loaded = True
         logger.info("✅ All character adapters loaded successfully!")
         
-        # Initialize voice synthesizer
-        voice_synthesizer = None
-        voice_enabled = False
-        
-        # First try VibeVoice
-        try:
-            voice_synthesizer = VoiceSynthesizer()
-            voice_enabled = await voice_synthesizer.initialize()
-            if voice_enabled:
-                logger.info("🎵 VibeVoice synthesizer initialized successfully!")
-            else:
-                logger.info("⚠️ VibeVoice initialization failed")
-                voice_synthesizer = None
-        except Exception as ve:
-            logger.warning(f"⚠️ VibeVoice initialization failed: {ve}")
-            voice_synthesizer = None
-            voice_enabled = False
-            
-        # If VibeVoice failed, try enhanced voice synthesizer fallback
-        if not voice_enabled:
-            try:
-                from backend.models.enhanced_voice_synthesizer import SimpleVoiceSynthesizer
-                voice_synthesizer = SimpleVoiceSynthesizer()
-                voice_enabled = await voice_synthesizer.initialize()
-                if voice_enabled:
-                    logger.info("🎵 Enhanced voice synthesizer initialized as fallback!")
-                else:
-                    logger.info("ℹ️ Voice synthesis disabled in config")
-                    voice_synthesizer = None
-            except Exception as sve:
-                logger.warning(f"⚠️ Enhanced voice synthesizer also failed: {sve}")
-                voice_synthesizer = None
-                voice_enabled = False
-                
-        if not voice_enabled:
-            logger.info("ℹ️ No voice synthesis available")
+        logger.info("ℹ️ Voice synthesis disabled - focusing on character chat only")
         
     except Exception as e:
         logger.error(f"❌ Failed to initialize characters: {e}")

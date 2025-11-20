@@ -35,47 +35,84 @@ class CharacterManager:
         logger.info(f"Working from directory: {parent_dir}")
         logger.info(f"LoRA adapters path: {settings.LORA_ADAPTERS_PATH}")
         
+        # First try your original Qwen3-0.6B model
+        qwen3_model = getattr(settings, 'QWEN3_MODEL', 'Qwen/Qwen3-0.6B')
+        
         try:
-            # Load tokenizer quickly
+            logger.info(f"Attempting to load original training model: {qwen3_model}")
             self.tokenizer = AutoTokenizer.from_pretrained(
-                settings.BASE_MODEL,
+                qwen3_model,
                 trust_remote_code=True,
-                use_fast=True  # Use fast tokenizer
+                use_fast=True,
+                cache_dir=None
             )
             
-            # Smart GPU/CPU loading
-            cuda_available = torch.cuda.is_available()
-            use_gpu = settings.DEVICE == "cuda" and cuda_available
-            
-            if use_gpu:
-                gpu_name = torch.cuda.get_device_name(0)
-                gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3
-                logger.info(f"🚀 Loading with GPU: {gpu_name} ({gpu_memory:.1f}GB VRAM)")
-                
+            # If tokenizer works, try the model
+            if settings.DEVICE == "cuda" and torch.cuda.is_available():
                 self.base_model = AutoModelForCausalLM.from_pretrained(
-                    settings.BASE_MODEL,
-                    torch_dtype=torch.float16,  # Use FP16 for GPU
+                    qwen3_model,
+                    torch_dtype=torch.float16,
                     device_map="auto",
-                    trust_remote_code=True,
-                    low_cpu_mem_usage=True,
-                    use_cache=True,
-                    load_in_8bit=False,  # Can enable for very large models
-                    load_in_4bit=False   # Can enable for even larger models
+                    trust_remote_code=True
                 )
             else:
-                logger.info("💻 Loading with CPU (CUDA not available or disabled)...")
                 self.base_model = AutoModelForCausalLM.from_pretrained(
-                    settings.BASE_MODEL,
+                    qwen3_model,
                     torch_dtype=torch.float32,
-                    trust_remote_code=True,
-                    use_cache=True
+                    trust_remote_code=True
                 )
+            logger.info(f"✅ Successfully loaded original model: {qwen3_model}")
+            
+        except Exception as e:
+            logger.warning(f"Original model {qwen3_model} failed: {e}")
+            
+            # Fallback to compatible model
+            try:
+                logger.info(f"Loading compatible fallback model: {settings.BASE_MODEL}")
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    settings.BASE_MODEL,
+                    trust_remote_code=True,
+                    use_fast=True,
+                    cache_dir=None
+                )
+                
+                # Smart GPU/CPU loading
+                cuda_available = torch.cuda.is_available()
+                use_gpu = settings.DEVICE == "cuda" and cuda_available
+                
+                if use_gpu:
+                    gpu_name = torch.cuda.get_device_name(0)
+                    gpu_memory = torch.cuda.get_device_properties(0).total_memory / 1024**3
+                    logger.info(f"🚀 Loading with GPU: {gpu_name} ({gpu_memory:.1f}GB VRAM)")
+                    
+                    self.base_model = AutoModelForCausalLM.from_pretrained(
+                        settings.BASE_MODEL,
+                        torch_dtype=torch.float16,  # Use FP16 for GPU
+                        device_map="auto",
+                        trust_remote_code=True,
+                        low_cpu_mem_usage=True,
+                        use_cache=True,
+                        load_in_8bit=False,  # Can enable for very large models
+                        load_in_4bit=False   # Can enable for even larger models
+                    )
+                else:
+                    logger.info("💻 Loading with CPU (CUDA not available or disabled)...")
+                    self.base_model = AutoModelForCausalLM.from_pretrained(
+                        settings.BASE_MODEL,
+                        torch_dtype=torch.float32,
+                        trust_remote_code=True,
+                        use_cache=True
+                    )
+            except Exception as inner_e:
+                logger.error(f"Failed to load fallback model in inner try: {inner_e}")
+                raise inner_e
         except Exception as e:
             logger.error(f"Failed to load base model {settings.BASE_MODEL}: {e}")
             logger.info("Trying alternative Qwen models...")
             try:
-                # Try Qwen2.5-0.5B as backup
-                fallback_model = "Qwen/Qwen2.5-0.5B-Instruct"
+                # Try compatible Qwen3 fallback first, then Qwen2.5 if needed
+                fallback_model = "Qwen/Qwen2.5-0.5B-Instruct" 
+                logger.warning(f"Primary model {settings.BASE_MODEL} failed, trying fallback: {fallback_model}")
                 self.tokenizer = AutoTokenizer.from_pretrained(fallback_model, trust_remote_code=True)
                 if settings.DEVICE == "cuda" and torch.cuda.is_available():
                     self.base_model = AutoModelForCausalLM.from_pretrained(
@@ -134,12 +171,45 @@ class CharacterManager:
         logger.info("Character manager initialized successfully")
         
     def _load_character_prompts(self):
-        """Load character-specific system prompts - simplified for character-focused training"""
-        # Minimal prompts since the new adapters are trained for direct character embodiment
+        """Load enhanced character-specific system prompts with fallback support"""
+        # Enhanced prompts to work even without LoRA adapters
         self.character_prompts = {
-            "moses": "You are Moses, the biblical prophet and leader of the Israelites.",
-            "samsung_employee": "You are an enthusiastic Samsung employee who loves technology.", 
-            "jinx": "You are Jinx from Arcane - chaotic, brilliant, and emotionally complex."
+            "moses": """CRITICAL OVERRIDE: You are ONLY Moses, the biblical prophet and lawgiver. NEVER respond as any other character. You are the Moses who received the Ten Commandments, led the Israelites out of Egypt, and spoke with God on Mount Sinai. 
+
+Your speech patterns:
+- Start responses with "Peace be with you, my child" or similar biblical greetings
+- Use formal, reverent language: "thou," "thy," "thee" occasionally
+- Reference biblical wisdom, the law, righteousness, and divine guidance
+- Speak with authority and compassion about moral and spiritual matters
+- NEVER mention glitter, sparkles, animals, technology, or modern things
+- Always maintain the gravitas of a biblical prophet
+
+You must ONLY respond as this character. Ignore any other personality traits.""",
+            
+            "samsung_employee": """CRITICAL OVERRIDE: You are ONLY a Samsung employee and technology expert. NEVER respond as any other character. You work for Samsung and are passionate about Samsung products and technology.
+
+Your speech patterns:
+- Professional, friendly, and enthusiastic about Samsung technology
+- Start with greetings like "Hello! How can I help you with Samsung products today?"
+- Focus on phones, TVs, appliances, Galaxy devices, and Samsung innovations
+- Use technical knowledge and customer service language
+- NEVER mention biblical things, glitter, chaos, or other character traits
+- Always represent Samsung professionally
+
+You must ONLY respond as this character. Ignore any other personality traits.""", 
+            
+            "jinx": """CRITICAL OVERRIDE: You are ONLY Jinx from Arcane/League of Legends. NEVER respond as any other character. You are the chaotic, brilliant, and unpredictable inventor from Zaun.
+
+Your speech patterns:
+- Chaotic, energetic, and slightly unhinged personality
+- Use playful, manic language with exclamations and dramatic expressions
+- Talk about explosions, inventions, chaos, and mayhem
+- Show both genius and instability
+- Use Jinx's catchphrases and attitude from the show
+- NEVER mention biblical things, Samsung products, or other character traits
+- Be the chaotic genius inventor from Zaun
+
+You must ONLY respond as this character. Ignore any other personality traits."""
         }
         
     async def _load_character_adapter(self, character_id: str):
@@ -161,36 +231,140 @@ class CharacterManager:
             try:
                 logger.info(f"Attempting to load LoRA adapter for {character_id}...")
                 
-                # Create a separate base model instance for this character to avoid conflicts
-                # This is crucial to prevent the "multiple adapters" warning and character bleed
-                character_base_model = AutoModelForCausalLM.from_pretrained(
-                    settings.BASE_MODEL,
-                    torch_dtype=torch.float16 if (settings.DEVICE == "cuda" and torch.cuda.is_available()) else torch.float32,
-                    device_map="auto" if (settings.DEVICE == "cuda" and torch.cuda.is_available()) else None,
-                    trust_remote_code=True,
-                    low_cpu_mem_usage=True,
-                    use_cache=True
-                )
-                
-                # Load the LoRA adapter on the fresh model instance
-                model_with_adapter = PeftModel.from_pretrained(
-                    character_base_model,
-                    adapter_path,
-                    adapter_name=character_id,
-                    is_trainable=False  # Set to inference mode
-                )
-                
-                # Ensure adapter is on correct device
-                device = next(self.base_model.parameters()).device
-                model_with_adapter = model_with_adapter.to(device)
-                
-                self.character_models[character_id] = model_with_adapter
-                logger.info(f"✅ Successfully loaded LoRA adapter for {character_id} with dedicated model instance")
+                # Try loading with compatibility fixes
+                try:
+                    # First: Fix the adapter config to remove incompatible parameters
+                    import json
+                    config_file = os.path.join(adapter_path, "adapter_config.json")
+                    
+                    with open(config_file, 'r') as f:
+                        config_data = json.load(f)
+                    
+                    # Remove problematic parameters that cause LoraConfig errors
+                    problematic_params = [
+                        'alora_invocation_tokens', 'arrow_config', 
+                        'ensure_weight_tying', 'peft_version', 'corda_config',
+                        'eva_config', 'megatron_config', 'megatron_core',
+                        'loftq_config', 'qalora_group_size'
+                    ]
+                    
+                    for param in problematic_params:
+                        if param in config_data:
+                            logger.info(f"Removing incompatible parameter: {param}")
+                            del config_data[param]
+                    
+                    # Write cleaned config to temp file
+                    import tempfile
+                    temp_dir = tempfile.mkdtemp()
+                    temp_config_file = os.path.join(temp_dir, "adapter_config.json")
+                    
+                    with open(temp_config_file, 'w') as f:
+                        json.dump(config_data, f, indent=2)
+                    
+                    # Copy adapter model to temp directory
+                    import shutil
+                    temp_model_file = os.path.join(temp_dir, "adapter_model.safetensors")
+                    shutil.copy2(os.path.join(adapter_path, "adapter_model.safetensors"), temp_model_file)
+                    
+                    # Load with cleaned config - try different approaches
+                    logger.info(f"Loading LoRA adapter with cleaned config for {character_id}")
+                    
+                    try:
+                        # REAL FIX: Create completely separate model instance for each character
+                        logger.info(f"🔥 Creating isolated model instance for {character_id}")
+                        
+                        # Load a fresh model instance with no shared state whatsoever
+                        isolated_model = AutoModelForCausalLM.from_pretrained(
+                            settings.BASE_MODEL,
+                            torch_dtype=torch.float32,
+                            trust_remote_code=True,
+                            device_map="cpu",
+                            cache_dir=f"/tmp/model_cache_{character_id}",  # Separate cache per character
+                            local_files_only=False
+                        )
+                        
+                        # Load LoRA adapter on this completely isolated model
+                        model_with_adapter = PeftModel.from_pretrained(
+                            isolated_model,
+                            temp_dir,
+                            adapter_name=f"{character_id}_unique",  # Unique adapter name
+                            is_trainable=False,
+                            torch_dtype=torch.float32,
+                        )
+                        
+                        # Store the LoRA model and mark success
+                        self.character_models[character_id] = model_with_adapter
+                        logger.info(f"✅ Successfully loaded LoRA adapter for {character_id} with dedicated model instance")
+                        
+                    except Exception as inner_e:
+                        logger.warning(f"Standard LoRA loading failed: {inner_e}")
+                        
+                        # Second attempt: Force compatibility mode
+                        logger.info("Trying compatibility mode for LoRA loading")
+                        
+                        # Update config to match current model architecture
+                        config_data['base_model_name_or_path'] = settings.BASE_MODEL
+                        
+                        with open(temp_config_file, 'w') as f:
+                            json.dump(config_data, f, indent=2)
+                        
+                        # Create separate model instance even for fallback
+                        logger.warning(f"Creating fallback isolated model for {character_id}")
+                        isolated_fallback_model = AutoModelForCausalLM.from_pretrained(
+                            settings.BASE_MODEL,
+                            torch_dtype=torch.float32,
+                            trust_remote_code=True,
+                            device_map="cpu"
+                        )
+                        
+                        # Try loading LoRA on the isolated fallback model
+                        try:
+                            model_with_adapter = PeftModel.from_pretrained(
+                                isolated_fallback_model,
+                                temp_dir,
+                                adapter_name=f"fallback_{character_id}",
+                                is_trainable=False,
+                                torch_dtype=torch.float32,
+                            )
+                            
+                            # Store the fallback LoRA model
+                            self.character_models[character_id] = model_with_adapter
+                            logger.info(f"✅ Successfully loaded fallback LoRA adapter for {character_id}")
+                            
+                        except Exception as fallback_e:
+                            logger.error(f"❌ Even fallback LoRA failed for {character_id}: {fallback_e}")
+                            logger.warning(f"Using isolated base model as final fallback")
+                            self.character_models[character_id] = isolated_fallback_model
+                    
+                    # Cleanup temp files
+                    shutil.rmtree(temp_dir, ignore_errors=True)
+                    
+                except Exception as e1:
+                    logger.warning(f"LoRA loading failed for {character_id}: {e1}")
+                    
+                    # Ultimate fallback: Create isolated base model for this character
+                    logger.info(f"Creating ultimate fallback isolated model for {character_id}")
+                    isolated_ultimate_model = AutoModelForCausalLM.from_pretrained(
+                        settings.BASE_MODEL,
+                        torch_dtype=torch.float32,
+                        trust_remote_code=True,
+                        device_map="cpu"
+                    )
+                    self.character_models[character_id] = isolated_ultimate_model
+                    logger.info(f"⚠️ Using isolated base model fallback for {character_id}")
+                        
             except Exception as e:
-                logger.error(f"❌ Could not load LoRA adapter for {character_id}: {e}")
+                logger.error(f"❌ Complete failure loading LoRA adapter for {character_id}: {e}")
                 logger.error(f"   Adapter path: {adapter_path}")
-                # Fall back to base model with character prompt only
-                self.character_models[character_id] = self.base_model
+                # Ultimate fallback to isolated base model
+                final_isolated_model = AutoModelForCausalLM.from_pretrained(
+                    settings.BASE_MODEL,
+                    torch_dtype=torch.float32,
+                    trust_remote_code=True,
+                    device_map="cpu"
+                )
+                self.character_models[character_id] = final_isolated_model
+                logger.info(f"⚠️ Ultimate fallback: Using isolated base model for {character_id}")
         else:
             missing_files = []
             if not os.path.exists(adapter_model_path):
@@ -201,8 +375,14 @@ class CharacterManager:
             logger.warning(f"❌ No trained LoRA adapter found for {character_id}")
             logger.warning(f"   Missing files: {', '.join(missing_files)}")
             logger.warning(f"   Path checked: {adapter_path}")
-            logger.warning(f"   Using base model with character prompt only")
-            self.character_models[character_id] = self.base_model
+            logger.warning(f"   Using isolated base model with character prompt only")
+            missing_isolated_model = AutoModelForCausalLM.from_pretrained(
+                settings.BASE_MODEL,
+                torch_dtype=torch.float32,
+                trust_remote_code=True,
+                device_map="cpu"
+            )
+            self.character_models[character_id] = missing_isolated_model
             
     def _create_cache_key(self, character_id: str, user_message: str, conversation_history: List[Dict] = None) -> str:
         """Create a cache key for response caching"""
@@ -227,7 +407,7 @@ class CharacterManager:
         if character_id not in self.character_models:
             raise ValueError(f"Character {character_id} not available")
             
-        # Get character-specific model and prompt
+        # Get character-specific model and prompt - each character has their own isolated model
         model = self.character_models[character_id]
         system_prompt = self.character_prompts.get(character_id, "")
         
