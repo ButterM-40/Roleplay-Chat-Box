@@ -45,32 +45,39 @@ class RoleplayChatInterface:
         except Exception as e:
             return f"❌ Failed to load models: {str(e)}"
     
+    def initialize_models_sync(self):
+        """Synchronous wrapper for model initialization"""
+        import asyncio
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            result = loop.run_until_complete(self.initialize_models())
+            loop.close()
+            return result
+        except Exception as e:
+            return f"❌ Failed to load models: {str(e)}"
+    
     def get_character_response(self, message: str, character_id: str, history: List[Tuple[str, str]]) -> Tuple[List[Tuple[str, str]], str]:
         """Generate character response and update chat history"""
         if not self.character_manager:
-            # Initialize synchronously for Gradio
-            import asyncio
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-            
-            if loop.is_running():
-                # If loop is already running, we need to handle this differently
-                return history + [(message, "⚠️ Models are still loading. Please wait...")], ""
-            else:
-                loop.run_until_complete(self.initialize_models())
+            return history + [(message, "⚠️ Models are still loading. Please try again in a moment...")], ""
         
         if not message.strip():
             return history, ""
         
         try:
-            # Generate response using character manager
+            # Convert Gradio history to conversation format
+            conversation_history = []
+            for user_msg, assistant_msg in history[-3:]:  # Last 3 exchanges for context
+                conversation_history.append({"role": "user", "content": user_msg})
+                if assistant_msg:
+                    conversation_history.append({"role": "assistant", "content": assistant_msg})
+            
+            # Generate response using character manager (correct method signature)
             response = self.character_manager.generate_response(
                 character_id=character_id,
-                user_input=message,
-                max_length=512
+                user_message=message,
+                conversation_history=conversation_history
             )
             
             # Update chat history
@@ -190,12 +197,14 @@ class RoleplayChatInterface:
             )
             
             # Initialize models when interface loads
-            async def init_status():
-                status = await self.initialize_models()
-                return status
+            def init_models():
+                if not self.character_manager:
+                    return self.initialize_models_sync()
+                else:
+                    return "✅ Models already loaded!"
             
             iface.load(
-                fn=lambda: "🔄 Initializing models...",
+                fn=init_models,
                 outputs=[status_display]
             )
         
