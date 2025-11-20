@@ -1,0 +1,8 @@
+{
+  "character": "moses",
+  "training_approach": "quick_cpu_optimized",
+  "dataset_size": 15,
+  "epochs": 3,
+  "training_time": "0:00:45.177027",
+  "timestamp": "2025-11-19T18:36:30.747550"
+}

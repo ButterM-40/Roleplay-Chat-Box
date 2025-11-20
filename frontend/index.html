@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Roleplay Chat</title>
+    <link rel="stylesheet" href="static/css/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar for character selection -->
+        <div class="sidebar">
+            <div class="sidebar-header">
+                <h2><i class="fas fa-masks-theater"></i> Characters</h2>
+                <button class="new-chat-btn" onclick="startNewChat()">
+                    <i class="fas fa-plus"></i> New Chat
+                </button>
+            </div>
+            
+            <div class="characters-list">
+                <div class="character-card" data-character="moses">
+                    <div class="character-avatar">
+                        <img src="static/avatars/moses.svg" alt="Moses" onerror="this.src='static/avatars/default.svg'">
+                    </div>
+                    <div class="character-info">
+                        <h3>Moses</h3>
+                        <p>Biblical Prophet</p>
+                    </div>
+                </div>
+                
+                <div class="character-card" data-character="samsung_employee">
+                    <div class="character-avatar">
+                        <img src="static/avatars/samsung.svg" alt="Samsung Employee" onerror="this.src='static/avatars/default.svg'">
+                    </div>
+                    <div class="character-info">
+                        <h3>Samsung Employee</h3>
+                        <p>Tech Expert</p>
+                    </div>
+                </div>
+                
+                <div class="character-card" data-character="jinx">
+                    <div class="character-avatar">
+                        <img src="static/avatars/jinx.svg" alt="Jinx" onerror="this.src='static/avatars/default.svg'">
+                    </div>
+                    <div class="character-info">
+                        <h3>Jinx</h3>
+                        <p>Chaotic Genius</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="sidebar-footer">
+                <button class="resources-btn" onclick="showResources()">
+                    <i class="fas fa-book"></i> Resources
+                </button>
+                <button class="settings-btn" onclick="showSettings()">
+                    <i class="fas fa-cog"></i> Settings
+                </button>
+            </div>
+        </div>
+        
+        <!-- Main chat area -->
+        <div class="main-content">
+            <div class="chat-header">
+                <div class="current-character">
+                    <div class="character-avatar-small">
+                        <img id="current-avatar" src="static/avatars/moses.svg" alt="Current Character">
+                    </div>
+                    <div class="character-details">
+                        <h2 id="current-character-name">Moses</h2>
+                        <p id="current-character-desc">Biblical Prophet and Lawgiver</p>
+                    </div>
+                </div>
+                
+                <div class="chat-controls">
+                    <button class="voice-toggle" onclick="toggleVoice()" title="Toggle Voice Output">
+                        <i id="voice-icon" class="fas fa-volume-up"></i>
+                    </button>
+                    <button class="clear-chat" onclick="clearChat()" title="Clear Chat">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="chat-messages" id="chat-messages">
+                <div class="welcome-message">
+                    <div class="message-avatar">
+                        <img src="static/avatars/moses.svg" alt="Moses">
+                    </div>
+                    <div class="message-content">
+                        <p>Peace be with you, my child. I am Moses, the lawgiver and prophet of the Most High. How may I guide you in righteousness?</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="chat-input-container">
+                <div class="typing-indicator" id="typing-indicator" style="display: none;">
+                    <div class="typing-dots">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                    <span id="typing-character">Moses</span> is typing...
+                </div>
+                
+                <div class="chat-input-wrapper">
+                    <textarea 
+                        id="message-input" 
+                        placeholder="Message Moses..."
+                        rows="1"
+                        onkeydown="handleKeyPress(event)"
+                        oninput="autoResize(this)"
+                    ></textarea>
+                    <button class="send-button" onclick="sendMessage()" id="send-btn">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Resources Modal -->
+    <div class="modal" id="resources-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Resources & Architecture</h2>
+                <button class="close-modal" onclick="closeModal('resources-modal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="resource-section">
+                    <h3>Models Used</h3>
+                    <div class="resource-links">
+                        <a href="https://huggingface.co/Polarium/qwen2-yoda-lora" target="_blank" class="resource-link">
+                            <i class="fab fa-huggingface"></i>
+                            Qwen2 Base Model (Polarium/qwen2-yoda-lora)
+                        </a>
+                        <a href="https://huggingface.co/microsoft/VibeVoice-1.5B" target="_blank" class="resource-link">
+                            <i class="fab fa-microsoft"></i>
+                            VibeVoice-1.5B (Text-to-Speech)
+                        </a>
+                    </div>
+                </div>
+                
+                <div class="resource-section">
+                    <h3>System Architecture</h3>
+                    <div class="architecture-diagram">
+                        <img src="static/diagrams/architecture.png" alt="System Architecture" onerror="this.style.display='none'">
+                    </div>
+                    <div class="architecture-text">
+                        <h4>Components:</h4>
+                        <ul>
+                            <li><strong>Frontend:</strong> HTML/CSS/JS with WebSocket communication</li>
+                            <li><strong>Backend:</strong> FastAPI with character management</li>
+                            <li><strong>Base Model:</strong> Qwen2-7B-Instruct for conversation</li>
+                            <li><strong>LoRA Adapters:</strong> Character-specific fine-tuning</li>
+                            <li><strong>Voice Synthesis:</strong> VibeVoice for audio output</li>
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="resource-section">
+                    <h3>LoRA Implementation</h3>
+                    <p>Low-Rank Adaptation (LoRA) allows efficient character switching by:</p>
+                    <ul>
+                        <li>Keeping base model frozen</li>
+                        <li>Training small adapter matrices for each character</li>
+                        <li>Switching adapters at inference time</li>
+                        <li>Reducing memory usage by ~90%</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Settings Modal -->
+    <div class="modal" id="settings-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Settings</h2>
+                <button class="close-modal" onclick="closeModal('settings-modal')">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-group">
+                    <label>Voice Output</label>
+                    <input type="checkbox" id="voice-enabled" checked onchange="updateVoiceSetting()">
+                </div>
+                <div class="setting-group">
+                    <label>Response Speed</label>
+                    <select id="response-speed">
+                        <option value="0.5">Slow</option>
+                        <option value="0.7" selected>Normal</option>
+                        <option value="0.9">Fast</option>
+                    </select>
+                </div>
+                <div class="setting-group">
+                    <label>Theme</label>
+                    <select id="theme-select" onchange="changeTheme()">
+                        <option value="dark">Dark</option>
+                        <option value="light">Light</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="static/js/rest_app.js"></script>
+</body>
+</html>
